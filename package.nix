@@ -1,6 +1,7 @@
 {
   lib,
   stdenv,
+  fetchFromGitHub,
   rustPlatform,
   pkg-config,
   cmake,
@@ -25,7 +26,12 @@ rustPlatform.buildRustPackage {
   pname = "dodeca";
   version = "0.6.1";
 
-  src = lib.cleanSource ./.;
+  src = fetchFromGitHub {
+    owner = "philocalyst";
+    repo = "dodeca";
+    rev = "742a7fe6f7389fba4ae53ec1f720a439d1dd0315";
+    hash = "sha256-CXz0OnEmBgt2tcSKNCBM9Psm5Z4+QPAhx1t8bCR6M0Y=";
+  };
 
   # Single vendored-deps hash (update by building once).
   cargoHash = "sha256-Vow1gG53VihCCmN665T51f75qGDZ8Ee205AbKsYbV+Q=";
