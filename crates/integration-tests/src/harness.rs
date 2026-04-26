@@ -1077,7 +1077,9 @@ impl Response {
     pub fn img_src(&self, pattern: &str) -> Option<String> {
         let tendril = StrTendril::from(self.body.as_str());
         let doc = hotmeal::parse(&tendril);
-        find_attr_in_node(&doc, doc.root, "img", "src", &|value| matches_glob(pattern, value))
+        find_attr_in_node(&doc, doc.root, "img", "src", &|value| {
+            matches_glob(pattern, value)
+        })
     }
 
     /// Find a <link> tag's href attribute matching a glob pattern
@@ -1085,7 +1087,9 @@ impl Response {
     pub fn css_link(&self, pattern: &str) -> Option<String> {
         let tendril = StrTendril::from(self.body.as_str());
         let doc = hotmeal::parse(&tendril);
-        find_attr_in_node(&doc, doc.root, "link", "href", &|value| matches_glob(pattern, value))
+        find_attr_in_node(&doc, doc.root, "link", "href", &|value| {
+            matches_glob(pattern, value)
+        })
     }
 
     /// Extract a value using a regex with one capture group
@@ -1134,9 +1138,16 @@ pub struct BuildResult {
     pub success: bool,
     pub stdout: String,
     pub stderr: String,
+    fixture_dir: PathBuf,
+    _temp_dir: tempfile::TempDir,
 }
 
 impl BuildResult {
+    /// The output directory used for this build invocation.
+    pub fn output_dir(&self) -> PathBuf {
+        self.fixture_dir.join("public")
+    }
+
     /// Assert the build succeeded
     pub fn assert_success(&self) -> &Self {
         assert!(
@@ -1163,6 +1174,19 @@ impl BuildResult {
         assert!(
             combined.contains(needle),
             "Build output should contain '{}' but doesn't.\nstdout:\n{}\nstderr:\n{}",
+            needle,
+            self.stdout,
+            self.stderr
+        );
+        self
+    }
+
+    /// Assert the build output (stdout + stderr) does not contain a string
+    pub fn assert_output_not_contains(&self, needle: &str) -> &Self {
+        let combined = format!("{}{}", self.stdout, self.stderr);
+        assert!(
+            !combined.contains(needle),
+            "Build output should not contain '{}' but does.\nstdout:\n{}\nstderr:\n{}",
             needle,
             self.stdout,
             self.stderr
@@ -1240,12 +1264,17 @@ impl InlineSite {
 
     /// Build this site (sync version for standalone test runner)
     pub fn build(&self) -> BuildResult {
-        build_site_from_source_sync(&self.fixture_dir)
+        build_site_from_source_sync(&self.fixture_dir, &[])
+    }
+
+    /// Build this site with extra `ddc build` arguments.
+    pub fn build_with_args(&self, extra_args: &[&str]) -> BuildResult {
+        build_site_from_source_sync(&self.fixture_dir, extra_args)
     }
 }
 
 /// Build a site from an arbitrary source directory (sync version)
-fn build_site_from_source_sync(src: &Path) -> BuildResult {
+fn build_site_from_source_sync(src: &Path, extra_args: &[&str]) -> BuildResult {
     // Create isolated temp directory
     let temp_dir = tempfile::Builder::new()
         .prefix("dodeca-build-test-")
@@ -1274,7 +1303,9 @@ fn build_site_from_source_sync(src: &Path) -> BuildResult {
     let fixture_str = fixture_dir.to_string_lossy().to_string();
     let ddc = ddc_binary();
     let mut cmd = StdCommand::new(&ddc);
-    cmd.args(["build", &fixture_str]);
+    cmd.arg("build");
+    cmd.args(extra_args);
+    cmd.arg(&fixture_str);
 
     // Set cell path if provided via env var
     if let Some(cell_dir) = cell_path() {
@@ -1293,6 +1324,8 @@ fn build_site_from_source_sync(src: &Path) -> BuildResult {
         success: output.status.success(),
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
         stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        fixture_dir,
+        _temp_dir: temp_dir,
     }
 }
 
@@ -1489,6 +1522,9 @@ mod unit_tests {
         assert!(matches_glob("*style*css", "/css/style.123.css"));
         assert!(matches_glob("*/style.*.css", "/css/style.123.css"));
         assert!(matches_glob("*/style.*.css", "/assets/css/style.123.css"));
-        assert!(!matches_glob("*/style.*.css", "/assets/css/style.123.css.map"));
+        assert!(!matches_glob(
+            "*/style.*.css",
+            "/assets/css/style.123.css.map"
+        ));
     }
 }
